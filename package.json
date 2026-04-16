@@ -1,0 +1,12 @@
+{
+  "name": "foodapp",
+  "version": "1.0.0",
+  "description": "FoodApp - Multi-Frontend E-Commerce Platform",
+  "scripts": {
+    "dev:all": "npm run dev:user & npm run dev:admin & npm run dev:delivery & npm run dev:backend",
+    "dev:user": "cd user && npm run dev",
+    "dev:admin": "cd admin && npm run dev",
+    "dev:delivery": "cd delivery && npm run dev",
+    "dev:backend": "cd backend && npm run dev"
+  }
+}

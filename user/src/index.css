@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  @apply bg-stone-50 text-gray-900 antialiased;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-500 text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-brand-600 active:scale-95 transition-all duration-200 shadow-sm;
+  }
+  .btn-ghost {
+    @apply px-3 py-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition;
+  }
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100;
+  }
+  .input {
+    @apply w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition text-sm;
+  }
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes bounce-in { from { transform: scale(0); } 50% { transform: scale(1.2); } to { transform: scale(1); } }
+
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+.animate-bounce-in { animation: bounce-in 0.3s ease-out; }
+
+.page-enter { animation: slide-up 0.4s ease-out; }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
