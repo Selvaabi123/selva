@@ -72,14 +72,8 @@ export default function DeliveryDashboard() {
       api.get('/delivery/orders'),
       api.get('/delivery/history?limit=100')
     ]).then(([activeRes, historyRes]) => {
-      console.log('Active orders response:', activeRes.data);
-      console.log('History orders response:', historyRes.data);
-      
       const active = activeRes.data.orders || [];
       const completed = historyRes.data.orders || [];
-      
-      console.log('Active count:', active.length, 'statuses:', active.map(o => o.status));
-      console.log('Completed count:', completed.length, 'statuses:', completed.map(o => o.status));
       
       setOrders(active);
       setCompletedOrders(completed);
@@ -96,8 +90,6 @@ export default function DeliveryDashboard() {
       const todayEarningsValue = todayCompleted.reduce((sum, o) => {
         return sum + (parseFloat(o.partner_earnings || o.delivery_fee || 0) || 0);
       }, 0);
-      
-      console.log('Today completed:', todayCompleted.length, 'earnings:', todayEarningsValue);
       
       setTodayEarnings(todayEarningsValue);
       setTotalDeliveries(todayCompleted.length);
