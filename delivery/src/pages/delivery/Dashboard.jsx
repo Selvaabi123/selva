@@ -22,6 +22,7 @@ const statusSteps = ['pending', 'confirmed', 'preparing', 'picked', 'out_for_del
 const getStepIndex = (status) => {
   if (status === 'ready') return 3;
   if (status === 'picked') return 3;
+  if (status === 'picked_up') return 3;
   return statusSteps.indexOf(status);
 };
 
@@ -143,7 +144,7 @@ export default function DeliveryDashboard() {
     load();
   };
 
-  const activeOrders = orders.filter(o => ['assigned', 'picked_up', 'out_for_delivery', 'preparing', 'confirmed', 'pending'].includes(o.status));
+  const activeOrders = orders.filter(o => ['assigned', 'picked', 'out_for_delivery', 'preparing', 'confirmed', 'pending'].includes(o.status));
   const completedDisplay = completedOrders.filter(o => o.status === 'delivered');
   const displayed = activeTab === 'active' ? activeOrders : completedDisplay;
 
@@ -178,7 +179,7 @@ export default function DeliveryDashboard() {
               <Package className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-gray-900 text-lg">Grocy-Mart</h1>
+              <h1 className="font-bold text-gray-900 text-lg">SwiftMart</h1>
               <p className="text-xs text-gray-500">Delivery Partner</p>
             </div>
           </div>
@@ -273,7 +274,7 @@ export default function DeliveryDashboard() {
                   <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
                     <Package className="w-5 h-5 text-white" />
                   </div>
-                  <span className="font-bold text-gray-900">Grocy-Mart</span>
+                  <span className="font-bold text-gray-900">SwiftMart</span>
                 </div>
                 <button onClick={() => setSidebarOpen(false)} className="p-2 bg-gray-100 rounded-lg">
                   <X className="w-5 h-5 text-gray-600" />
@@ -484,40 +485,34 @@ export default function DeliveryDashboard() {
                 {order.status !== 'delivered' && (
                   <div className="flex flex-wrap gap-3">
                     <button
-                    onClick={() => {
-                      if (order.delivery_latitude && order.delivery_longitude) {
-                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${order.delivery_latitude},${order.delivery_longitude}&travelmode=driving`, '_blank');
-                      } else {
-                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_address)}`, '_blank');
-                      }
-                    }}
-                    className="flex-1 min-w-[120px] py-3.5 rounded-xl bg-blue-50 text-blue-600 font-semibold flex items-center justify-center gap-2 hover:bg-blue-100 transition"
-                  >
-                    <Navigation className="w-4 h-4" />
-                    Navigate
-                  </button>
-
-                  {order.status === 'picked' && (
-                    <button
-                      onClick={() => handleStatusUpdate(order.id, 'out_for_delivery')}
-                      disabled={updating === order.id}
-                      className="flex-1 min-w-[140px] py-3.5 rounded-xl bg-purple-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg hover:bg-purple-600 transition disabled:opacity-50"
+                      onClick={() => navigate(`/order/${order.id}/map`)}
+                      className="flex-1 min-w-[120px] py-3.5 rounded-xl bg-blue-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-600 transition"
                     >
-                      <Truck className="w-4 h-4" />
-                      {updating === order.id ? 'Updating...' : 'Start Delivery'}
+                      <Navigation className="w-4 h-4" />
+                      Navigate
                     </button>
-                  )}
 
-                  {order.status === 'out_for_delivery' && (
-                    <button
-                      onClick={() => openOTPModal(order)}
-                      className="flex-1 min-w-[160px] py-3.5 rounded-xl bg-green-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg hover:bg-green-600 transition"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Verify & Deliver
-                    </button>
-                  )}
-                </div>
+                    {order.status === 'picked' && (
+                      <button
+                        onClick={() => handleStatusUpdate(order.id, 'out_for_delivery')}
+                        disabled={updating === order.id}
+                        className="flex-1 min-w-[140px] py-3.5 rounded-xl bg-purple-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg hover:bg-purple-600 transition disabled:opacity-50"
+                      >
+                        <Truck className="w-4 h-4" />
+                        {updating === order.id ? 'Updating...' : 'Start Delivery'}
+                      </button>
+                    )}
+
+                    {order.status === 'out_for_delivery' && (
+                      <button
+                        onClick={() => openOTPModal(order)}
+                        className="flex-1 min-w-[160px] py-3.5 rounded-xl bg-green-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg hover:bg-green-600 transition"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Verify & Deliver
+                      </button>
+                    )}
+                  </div>
                 )}
               </motion.div>
             ))}

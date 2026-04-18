@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Edit2, Trash2, Search, X, ToggleLeft, ToggleRight, Upload, Image } from 'lucide-react';
 import api from '../../utils/api';
 import AdminLayout from '../../components/AdminLayout';
@@ -16,9 +16,9 @@ export default function AdminProducts() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const intervalRef = useRef(null);
 
-  const load = () => {
-    setLoading(true);
+  const load = useCallback(() => {
     Promise.all([
       api.get('/products/admin/all'),
       api.get('/categories'),
@@ -28,9 +28,16 @@ export default function AdminProducts() {
     }).catch(() => {
       toast.error('Failed to load products', 'Please refresh the page and try again.');
     }).finally(() => setLoading(false));
-  };
+  }, [toast]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    setLoading(true);
+    load();
+    intervalRef.current = setInterval(load, 30000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [load]);
 
   const openAdd = () => { setForm(emptyForm); setEditing(null); setShowModal(true); };
   const openEdit = (p) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Edit2, Trash2, X, ShoppingBag } from 'lucide-react';
 import api from '../../utils/api';
 import AdminLayout from '../../components/AdminLayout';
@@ -12,13 +12,20 @@ export default function AdminCategories() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '' });
   const [saving, setSaving] = useState(false);
+  const intervalRef = useRef(null);
 
-  const load = () => {
-    setLoading(true);
+  const load = useCallback(() => {
     api.get('/categories').then(r => setCategories(r.data.categories || [])).finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    setLoading(true);
+    load();
+    intervalRef.current = setInterval(load, 30000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [load]);
 
   const openAdd = () => { setEditing(null); setForm({ name: '' }); setShowModal(true); };
   const openEdit = (cat) => { setEditing(cat); setForm({ name: cat.name }); setShowModal(true); };

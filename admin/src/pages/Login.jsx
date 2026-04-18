@@ -1,26 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, Eye, EyeOff, Mail, Lock, Zap } from 'lucide-react';
+import { ShoppingBag, Eye, EyeOff, Mail, Lock, Zap, Shield, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import api from '../utils/api';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, verify2FA } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [otp, setOtp] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [require2FA, setRequire2FA] = useState(false);
+  const [maskPhone, setMaskPhone] = useState(null);
 
-  const handleSubmit = async (e) => {
+  useEffect(() => {
+    api.get('/categories').catch(() => {});
+  }, []);
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
-      const user = await login(form.email, form.password);
-      toast.success(`Welcome, ${user.name}!`);
-      if (user.role === 'admin') navigate('/');
-      else toast.error('Access denied. Admin only.');
+      const res = await login(form.email, form.password);
+      
+      if (res.require2FA) {
+        setRequire2FA(true);
+        setMaskPhone(res.maskPhone);
+        toast.success('Enter the OTP sent to your phone');
+      } else {
+        const user = res;
+        toast.success(`Welcome, ${user.name}!`);
+        if (user.role === 'admin') navigate('/');
+        else toast.error('Access denied. Admin only.');
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed');
+    } finally { setLoading(false); }
+  };
+
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      const user = await verify2FA(form.email, otp);
+      toast.success(`Welcome, ${user.name}!`);
+      navigate('/');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid OTP');
     } finally { setLoading(false); }
   };
 
@@ -41,40 +69,67 @@ export default function Login() {
             <p className="text-slate-400 text-sm mt-2">Sign in to manage your dashboard</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                  placeholder="admin@foodapp.com" 
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition text-sm"
-                  required />
+          {require2FA ? (
+            <form onSubmit={handleVerify2FA} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">2FA Verification</label>
+                <div className="relative">
+                  <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <input type="text" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit OTP" 
+                    className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition text-sm text-center tracking-[0.5em] font-mono"
+                    maxLength={6}
+                    required />
+                </div>
+                <p className="text-slate-400 text-xs mt-2">OTP sent to {maskPhone}</p>
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input type={showPass ? 'text' : 'password'} value={form.password}
-                  onChange={e => setForm({ ...form, password: e.target.value })}
-                  placeholder="Enter your password" 
-                  className="w-full pl-12 pr-12 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition text-sm"
-                  required />
-                <button type="button" onClick={() => setShowPass(!showPass)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
-                  {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+              <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-3.5 rounded-xl hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2">
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <span>Verify OTP</span>
+                )}
+              </button>
+              <button type="button" onClick={() => { setRequire2FA(false); setOtp(''); }} className="w-full text-slate-400 text-sm hover:text-white transition">
+                ← Back to login
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                    placeholder="admin@foodapp.com" 
+                    className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition text-sm"
+                    required />
+                </div>
               </div>
-            </div>
-            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-3.5 rounded-xl hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2">
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              ) : (
-                <span>Sign In</span>
-              )}
-            </button>
-          </form>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <input type={showPass ? 'text' : 'password'} value={form.password}
+                    onChange={e => setForm({ ...form, password: e.target.value })}
+                    placeholder="Enter your password" 
+                    className="w-full pl-12 pr-12 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition text-sm"
+                    required />
+                  <button type="button" onClick={() => setShowPass(!showPass)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
+                    {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+              <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-3.5 rounded-xl hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all duration-200 shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2">
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <span>Sign In</span>
+                )}
+              </button>
+            </form>
+          )}
           
           <p className="text-center text-slate-500 text-xs mt-6">
             Secured with enterprise-grade encryption

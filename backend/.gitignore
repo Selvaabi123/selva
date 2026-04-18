@@ -1,9 +1,46 @@
-# Environment variables - NEVER commit these
+# Environment files - NEVER COMMIT THESE
 .env
 .env.local
 .env.development
 .env.production
-.env.*.local
+.env.staging
 
-# Keep the example
-!.env.example
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+build/
+
+# Debug and test scripts
+debug_*.js
+check_*.js
+test_*.js
+fix_*.js
+reset_*.js
+migrate.js
+seed.js
+
+# Uploads
+uploads/
+
+# Secrets (if any leaked)
+*.pem
+*.key
+credentials.json
+secrets.json

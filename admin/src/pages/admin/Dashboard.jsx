@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Users, Package, TrendingUp, ArrowRight } from 'lucide-react';
 import api from '../../utils/api';
@@ -8,10 +8,23 @@ import { OrderStatusBadge } from '../../components/OrderStatus';
 export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const intervalRef = useRef(null);
+
+  const fetchAnalytics = useCallback(() => {
+    api.get('/orders/analytics')
+      .then(r => setAnalytics(r.data.analytics))
+      .catch(err => console.error('Failed to fetch analytics:', err))
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
-    api.get('/orders/analytics').then(r => setAnalytics(r.data.analytics)).finally(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    fetchAnalytics();
+    intervalRef.current = setInterval(fetchAnalytics, 30000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchAnalytics]);
 
   const stats = analytics ? [
     { label: 'Total Orders', value: analytics.totalOrders, icon: ShoppingBag, color: 'bg-blue-50 text-blue-600', change: 'All time' },

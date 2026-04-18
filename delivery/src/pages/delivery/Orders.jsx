@@ -4,6 +4,7 @@ import { Package, RefreshCw, LogOut, MapPin, Phone, Navigation, Menu, X, Chevron
 import { AnimatePresence, motion } from 'framer-motion';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import SanitizedText from '../../components/SanitizedText';
 import toast from 'react-hot-toast';
 
 export default function DeliveryOrders() {
@@ -48,7 +49,7 @@ export default function DeliveryOrders() {
     return () => clearInterval(interval);
   }, []);
 
-  const activeOrders = orders.filter(o => !['delivered', 'cancelled'].includes(o.status));
+  const activeOrders = orders.filter(o => !['delivered', 'cancelled', 'returned'].includes(o.status));
   const completedOrders = orders.filter(o => o.status === 'delivered');
   const displayed = activeTab === 'active' ? activeOrders : completedOrders;
 
@@ -74,7 +75,7 @@ export default function DeliveryOrders() {
               <Package className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-gray-900 text-lg">Grocy-Mart</h1>
+              <h1 className="font-bold text-gray-900 text-lg">SwiftMart</h1>
               <p className="text-xs text-gray-500">Delivery Partner</p>
             </div>
           </div>
@@ -108,8 +109,8 @@ export default function DeliveryOrders() {
               {user?.name?.charAt(0) || 'P'}
             </div>
             <div className="flex-1">
-              <p className="font-medium text-gray-900 text-sm">{user?.name}</p>
-              <p className="text-xs text-gray-400">{user?.phone}</p>
+              <SanitizedText text={user?.name} className="font-medium text-gray-900 text-sm" />
+              <SanitizedText text={user?.phone} className="text-xs text-gray-400 block" />
             </div>
           </div>
           <button 
@@ -172,7 +173,7 @@ export default function DeliveryOrders() {
                   <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
                     <Package className="w-5 h-5 text-white" />
                   </div>
-                  <span className="font-bold text-gray-900">Grocy-Mart</span>
+                  <span className="font-bold text-gray-900">SwiftMart</span>
                 </div>
                 <button onClick={() => setSidebarOpen(false)} className="p-2 bg-gray-100 rounded-lg">
                   <X className="w-5 h-5 text-gray-600" />
@@ -276,15 +277,15 @@ export default function DeliveryOrders() {
                     {order.customer_name?.charAt(0) || 'C'}
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{order.customer_name || 'Customer'}</p>
-                    <p className="text-sm text-gray-500">{order.customer_phone}</p>
+                    <SanitizedText text={order.customer_name} className="font-semibold text-gray-900" />
+                    <SanitizedText text={order.customer_phone} className="text-sm text-gray-500 block" />
                   </div>
                 </div>
 
                 {order.delivery_address && (
                   <div className="flex items-start gap-2 p-3 lg:p-4 bg-gray-50 rounded-xl lg:rounded-2xl mb-4">
                     <MapPin className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm lg:text-base text-gray-600 line-clamp-2">{order.delivery_address}</p>
+                    <SanitizedText text={order.delivery_address} className="text-sm lg:text-base text-gray-600 line-clamp-2 block" />
                   </div>
                 )}
 
@@ -295,7 +296,7 @@ export default function DeliveryOrders() {
                         e.stopPropagation();
                         navigate(`/order/${order.id}/map`);
                       }}
-                      className="flex-1 min-w-[120px] py-3 rounded-xl bg-blue-50 text-blue-600 font-semibold flex items-center justify-center gap-2 hover:bg-blue-100 transition"
+                      className="flex-1 min-w-[120px] py-3 rounded-xl bg-blue-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-600 transition"
                     >
                       <Navigation className="w-4 h-4" />
                       Navigate

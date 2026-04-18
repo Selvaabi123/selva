@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, X, User, Shield, Bike } from 'lucide-react';
 import api from '../../utils/api';
 import AdminLayout from '../../components/AdminLayout';
+import SanitizedText from '../../components/SanitizedText';
 import { useToast } from '../../context/ToastContext';
 
 const roleIcons = { admin: Shield, user: User, delivery: Bike };
@@ -14,14 +15,23 @@ export default function AdminUsers() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'delivery', phone: '' });
   const [saving, setSaving] = useState(false);
+  const intervalRef = useRef(null);
 
-  const load = () => api.get('/users/admin/all')
+  const load = useCallback(() => api.get('/users/admin/all')
     .then(r => setUsers(r.data.users || []))
     .catch(() => {
       toast.error('Failed to load users', 'Please refresh the page.');
     })
-    .finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+    .finally(() => setLoading(false)), [toast]);
+  
+  useEffect(() => { 
+    setLoading(true);
+    load();
+    intervalRef.current = setInterval(load, 30000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [load]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -124,8 +134,8 @@ export default function AdminUsers() {
                             <RoleIcon className="w-4 h-4" />
                           </div>
                           <div>
-                            <p className="font-medium text-gray-800">{u.name}</p>
-                            <p className="text-gray-400 text-xs">{u.email}</p>
+                            <SanitizedText text={u.name} className="font-medium text-gray-800" />
+                            <SanitizedText text={u.email} className="text-gray-400 text-xs block" />
                           </div>
                         </div>
                       </td>

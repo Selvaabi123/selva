@@ -3,16 +3,19 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
-const { cartRouter, ordersRouter, deliveryRouter, categoriesRouter, usersRouter } = require('./routes/index');
+const securityRoutes = require('./routes/security');
+const { cartRouter, ordersRouter, deliveryRouter, categoriesRouter, usersRouter, paymentRouter } = require('./routes/index');
+const { setCSRFCookie, validateCSRF } = require('./middleware/csrf');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Security Middleware
+// Security Middleware - Enhanced Helmet
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -20,15 +23,32 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
     },
   },
   crossOriginEmbedderPolicy: false,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  permissionsPolicy: {
+    geolocation: [],
+    microphone: [],
+    camera: []
+  }
 }));
 
 // Rate Limiting
+const isDev = process.env.NODE_ENV !== 'production';
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: isDev ? 10000 : 500, // Much higher limit in development
   message: { success: false, message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -37,10 +57,16 @@ const limiter = rateLimit({
 // Strict rate limit for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Increased for testing
-  message: { success: false, message: 'Too many login attempts, try again later' },
+  max: isDev ? 100 : 5, // 5 attempts in production
+  message: { success: false, message: 'Too many login attempts. Try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip + ':' + req.body.email;
+  },
+  skip: (req) => {
+    return isDev;
+  }
 });
 
 // CORS Configuration
@@ -88,9 +114,15 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Cookie parser for JWT cookies
+app.use(cookieParser());
+
 // Body Parsers with size limits
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// CSRF Protection - Set cookie for safe methods
+app.use(setCSRFCookie);
 
 // Static uploads - with security headers
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
@@ -113,16 +145,27 @@ app.get('/api/health', (req, res) => {
 // Apply general rate limiting
 app.use('/api/', limiter);
 
+// CSRF validation for state-changing methods (applied before routes)
+app.use('/api/', (req, res, next) => {
+  if (isDev) return next(); // Skip CSRF in development
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    return validateCSRF(req, res, next);
+  }
+  next();
+});
+
 // Routes - with auth rate limiting
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth', authRoutes);
+app.use('/api/security', securityRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/cart', cartRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/delivery', deliveryRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/payment', paymentRouter);
 
 // 404 handler
 app.use((req, res) => {

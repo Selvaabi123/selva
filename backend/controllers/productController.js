@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 const { validationResult } = require('express-validator');
+const logger = require('../utils/logger');
 
-// GET /api/products
 const getProducts = async (req, res) => {
   const { category, search, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -23,7 +23,6 @@ const getProducts = async (req, res) => {
     params.push(`%${search}%`);
   }
 
-  // Count total
   const countQuery = query.replace('SELECT p.*, c.name AS category_name', 'SELECT COUNT(*)');
   const countResult = await pool.query(countQuery, params);
   const total = parseInt(countResult.rows[0].count);
@@ -35,12 +34,11 @@ const getProducts = async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ success: true, products: result.rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// GET /api/products/:id
 const getProduct = async (req, res) => {
   try {
     const result = await pool.query(
@@ -50,11 +48,11 @@ const getProduct = async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Product not found' });
     res.json({ success: true, product: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// POST /api/products (admin)
 const createProduct = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
@@ -67,12 +65,11 @@ const createProduct = async (req, res) => {
     );
     res.status(201).json({ success: true, product: result.rows[0] });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// PUT /api/products/:id (admin)
 const updateProduct = async (req, res) => {
   const { name, description, price, category_id, image_url, stock, is_available } = req.body;
   try {
@@ -84,23 +81,22 @@ const updateProduct = async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ success: false, message: 'Product not found' });
     res.json({ success: true, product: result.rows[0] });
   } catch (err) {
-    console.error('Update product error:', err.message);
-    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// DELETE /api/products/:id (admin)
 const deleteProduct = async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM products WHERE id=$1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Product not found' });
     res.json({ success: true, message: 'Product deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// GET /api/products/admin/all (admin - includes unavailable)
 const getAllProductsAdmin = async (req, res) => {
   try {
     const result = await pool.query(
@@ -108,7 +104,8 @@ const getAllProductsAdmin = async (req, res) => {
     );
     res.json({ success: true, products: result.rows });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 

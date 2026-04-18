@@ -26,7 +26,7 @@ export default function ToastDemo() {
   };
 
   const triggerInfo = () => {
-    toast.info('New Update', 'Grocy-Mart v2.0 is now available with improved performance and new features!');
+    toast.info('New Update', 'SwiftMart v2.0 is now available with improved performance and new features!');
   };
 
   const triggerDelete = () => {

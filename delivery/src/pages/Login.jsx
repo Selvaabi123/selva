@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Eye, EyeOff, Truck, Shield, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import api from '../utils/api';
 
 export default function Login() {
   const { login } = useAuth();
@@ -10,6 +11,10 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api.get('/categories').catch(() => {});
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,7 +42,7 @@ export default function Login() {
           <div className="w-24 h-24 bg-white/20 rounded-3xl flex items-center justify-center mb-8 shadow-lg">
             <Truck className="w-12 h-12" />
           </div>
-          <h1 className="text-4xl font-bold mb-4">Grocy-Mart</h1>
+          <h1 className="text-4xl font-bold mb-4">SwiftMart</h1>
           <p className="text-xl text-white/80 text-center max-w-md mb-8">
             Deliver happiness to thousands of customers
           </p>
@@ -65,7 +70,7 @@ export default function Login() {
             <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mr-3 shadow-lg shadow-green-500/30">
               <Truck className="w-7 h-7 text-white" />
             </div>
-            <span className="font-bold text-2xl text-gray-900">Grocy-Mart</span>
+            <span className="font-bold text-2xl text-gray-900">SwiftMart</span>
           </div>
 
           <div className="bg-white rounded-3xl p-8 shadow-xl shadow-gray-200/50">

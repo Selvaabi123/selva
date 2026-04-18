@@ -4,61 +4,64 @@ import api from '../utils/api';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(() => {
-    // Load from localStorage on initial render
     const stored = localStorage.getItem('deliveryOnline');
     return stored === 'true';
   });
 
-  // Save to localStorage whenever isOnline changes
   useEffect(() => {
     localStorage.setItem('deliveryOnline', isOnline.toString());
   }, [isOnline]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
-      api.get('/auth/me')
-        .then(res => { 
-          setUser(res.data.user); 
-          localStorage.setItem('user', JSON.stringify(res.data.user));
-        })
-        .catch(() => { localStorage.removeItem('token'); localStorage.removeItem('user'); setUser(null); })
-        .finally(() => setLoading(false));
-    } else {
+    if (!token) {
       setLoading(false);
+      return;
     }
+
+    api.get('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => {
+        setUser(res.data.user);
+      })
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          setUser(null);
+        } else {
+          setUser(null);
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
-    const { token, user } = res.data;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(user));
+    const res = await api.post('/auth/login', { email, password }, { withCredentials: true });
+    const { user } = res.data;
     setUser(user);
     return user;
   };
 
   const register = async (data) => {
-    const res = await api.post('/auth/register', data);
-    const { token, user } = res.data;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(user));
+    const res = await api.post('/auth/register', data, { withCredentials: true });
+    const { user } = res.data;
     setUser(user);
     return user;
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('deliveryOnline');
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout', {}, { withCredentials: true });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
     setUser(null);
     setIsOnline(false);
+    localStorage.removeItem('deliveryOnline');
   };
 
   return (

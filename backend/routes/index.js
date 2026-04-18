@@ -70,4 +70,13 @@ usersRouter.get('/admin/all', authenticate, authorize('admin'), getAllUsers);
 usersRouter.post('/admin/create', authenticate, authorize('admin'), createUser);
 usersRouter.delete('/admin/:id', authenticate, authorize('admin'), deleteUser);
 
-module.exports = { cartRouter, ordersRouter, deliveryRouter, categoriesRouter, usersRouter };
+// routes/payment.js
+const paymentRouter = express.Router();
+const { createOrder, verifyPayment, getPaymentDetails, getKey } = require('../controllers/paymentController');
+
+paymentRouter.get('/key', getKey);
+paymentRouter.post('/create-order', authenticate, authorize('user'), createOrder);
+paymentRouter.post('/verify', authenticate, authorize('user'), verifyPayment);
+paymentRouter.get('/:transaction_id', authenticate, getPaymentDetails);
+
+module.exports = { cartRouter, ordersRouter, deliveryRouter, categoriesRouter, usersRouter, paymentRouter };

@@ -1,17 +1,51 @@
 const pool = require('../config/db');
+const crypto = require('crypto');
+const logger = require('../utils/logger');
 
-// ============================================================
-// HELPER: Generate 4-digit OTP
-// ============================================================
-const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
+const generateOTP = () => crypto.randomInt(1000, 9999).toString();
 
-// ============================================================
-// GET /api/delivery/orders
-// ============================================================
+const otpAttempts = new Map();
+
+const MAX_OTP_ATTEMPTS = 3;
+const OTP_LOCKOUT_DURATION = 15 * 60 * 1000;
+
+const getOTPAttempts = (orderId) => {
+  const attempts = otpAttempts.get(orderId);
+  if (!attempts) return { count: 0, lockedUntil: null };
+  
+  if (attempts.lockedUntil && Date.now() < attempts.lockedUntil) {
+    return attempts;
+  }
+  
+  if (attempts.lockedUntil && Date.now() >= attempts.lockedUntil) {
+    otpAttempts.delete(orderId);
+    return { count: 0, lockedUntil: null };
+  }
+  
+  return { count: attempts.count, lockedUntil: null };
+};
+
+const incrementOTPAttempts = (orderId) => {
+  const current = getOTPAttempts(orderId);
+  
+  if (current.lockedUntil && Date.now() < current.lockedUntil) {
+    return current;
+  }
+  
+  const newCount = (current.count || 0) + 1;
+  const lockedUntil = newCount >= MAX_OTP_ATTEMPTS ? Date.now() + OTP_LOCKOUT_DURATION : null;
+  
+  otpAttempts.set(orderId, { count: newCount, lockedUntil });
+  return { count: newCount, lockedUntil };
+};
+
+const resetOTPAttempts = (orderId) => {
+  otpAttempts.delete(orderId);
+};
+
 const getAssignedOrders = async (req, res) => {
-  console.log('getAssignedOrders called for user:', req.user.id, req.user.email);
+  logger.info('Fetching assigned orders', { partnerId: req.user.id });
   try {
-    console.log('Query: delivery_partner_id =', req.user.id);
     
     const result = await pool.query(`
       SELECT 
@@ -56,13 +90,13 @@ const getAssignedOrders = async (req, res) => {
         o.created_at DESC
     `, [req.user.id]);
 
-    console.log('Orders found:', result.rows.length);
-    console.log('Order statuses:', result.rows.map(o => o.status));
+    
+    
     
     res.json({ success: true, orders: result.rows });
   } catch (err) {
-    console.error('Error fetching orders:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    logger.error('Error fetching assigned orders', { error: err.message, partnerId: req.user.id });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -88,7 +122,8 @@ const getOrderById = async (req, res) => {
 
     res.json({ success: true, order: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -99,7 +134,7 @@ const toggleOnlineStatus = async (req, res) => {
   const { is_online } = req.body;
   const { latitude, longitude } = req.body;
 
-  console.log('toggle-online called:', { user: req.user, is_online, latitude, longitude });
+  
 
   if (!req.user || !req.user.id) {
     return res.status(401).json({ success: false, message: 'Unauthorized: No user found' });
@@ -119,7 +154,7 @@ const toggleOnlineStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    console.log('Update successful:', result.rows[0]);
+    
 
     res.json({ 
       success: true, 
@@ -127,8 +162,8 @@ const toggleOnlineStatus = async (req, res) => {
       message: is_online ? 'You are now online!' : 'You are now offline'
     });
   } catch (err) {
-    console.error('toggle-online error:', err);
-    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -157,7 +192,8 @@ const updateLocation = async (req, res) => {
 
     res.json({ success: true, message: 'Location updated' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -266,8 +302,8 @@ const updateDeliveryStatus = async (req, res) => {
       message: `Status updated to ${status.replace(/_/g, ' ')}`
     });
   } catch (err) {
-    console.error('Status update error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -277,11 +313,9 @@ const updateDeliveryStatus = async (req, res) => {
 const verifyOTP = async (req, res) => {
   const { order_id, otp } = req.body;
 
-  console.log('verifyOTP called:', { order_id, otp, user: req.user?.id });
-
   // Validate authentication
   if (!req.user || !req.user.id) {
-    console.error('User not authenticated - req.user:', req.user);
+    logger.warn('OTP verify attempt without auth', { partnerId: req.user?.id });
     return res.status(401).json({ success: false, message: 'User not authenticated' });
   }
 
@@ -296,8 +330,19 @@ const verifyOTP = async (req, res) => {
 
   // Validate OTP format (must be 4 digits)
   if (!/^\d{4}$/.test(otp)) {
-    console.log('Invalid OTP format:', otp);
+    logger.warn('Invalid OTP format', { orderId: order_id, partnerId: req.user.id });
     return res.status(400).json({ success: false, message: 'OTP must be 4 digits' });
+  }
+
+  // Check if OTP is locked due to too many failed attempts
+  const attemptInfo = getOTPAttempts(order_id);
+  if (attemptInfo.lockedUntil && Date.now() < attemptInfo.lockedUntil) {
+    const remainingMinutes = Math.ceil((attemptInfo.lockedUntil - Date.now()) / 60000);
+    logger.warn('OTP locked due to too many attempts', { orderId: order_id, partnerId: req.user.id, attempts: attemptInfo.count });
+    return res.status(429).json({ 
+      success: false, 
+      message: `Too many failed attempts. Please wait ${remainingMinutes} minute(s) before trying again.`
+    });
   }
 
   try {
@@ -310,7 +355,7 @@ const verifyOTP = async (req, res) => {
     );
 
     if (orderCheck.rows.length === 0) {
-      console.log('Order not found or not assigned to this partner. Order ID:', order_id, 'User ID:', req.user.id);
+      logger.warn('Order not found for OTP verify', { orderId: order_id, partnerId: req.user.id });
       return res.status(404).json({ 
         success: false, 
         message: 'Order not found or not assigned to you' 
@@ -322,7 +367,7 @@ const verifyOTP = async (req, res) => {
     // Check if order is in deliverable status
     const allowedStatuses = ['out_for_delivery', 'arrived_at_door'];
     if (!allowedStatuses.includes(order.status)) {
-      console.log('Order status not eligible for OTP verification:', order.status);
+      logger.warn('Invalid order status for OTP verify', { orderId: order_id, status: order.status });
       return res.status(400).json({ 
         success: false, 
         message: 'Order is not ready for delivery verification' 
@@ -331,7 +376,7 @@ const verifyOTP = async (req, res) => {
 
     // Check if OTP exists in database
     if (!order.delivery_otp) {
-      console.log('No OTP generated for this order');
+      logger.warn('OTP not available for order', { orderId: order_id });
       return res.status(400).json({ 
         success: false, 
         message: 'OTP not available for this order. Please contact support.' 
@@ -339,18 +384,29 @@ const verifyOTP = async (req, res) => {
     }
 
     // Verify OTP
-    console.log('Comparing OTP:', { db: order.delivery_otp, entered: otp, match: order.delivery_otp === otp });
-    
     if (String(order.delivery_otp) !== String(otp)) {
-      console.log('OTP mismatch');
+      const newAttemptInfo = incrementOTPAttempts(order_id);
+      logger.warn('Invalid OTP attempt', { orderId: order_id, partnerId: req.user.id, attempts: newAttemptInfo.count });
+      
+      if (newAttemptInfo.lockedUntil) {
+        return res.status(429).json({ 
+          success: false, 
+          message: 'Too many failed attempts. OTP is now locked for 15 minutes.',
+          attempts: MAX_OTP_ATTEMPTS
+        });
+      }
+      
       return res.status(400).json({ 
         success: false, 
-        message: 'Invalid OTP. Please try again.',
-        verified: false 
+        message: `Invalid OTP. ${MAX_OTP_ATTEMPTS - newAttemptInfo.count} attempt(s) remaining.`,
+        verified: false,
+        attemptsRemaining: MAX_OTP_ATTEMPTS - newAttemptInfo.count
       });
     }
 
-    // OTP verified - update order to delivered
+    // OTP verified - reset attempts and update order to delivered
+    resetOTPAttempts(order_id);
+    
     const updateResult = await pool.query(
       `UPDATE orders 
        SET status = 'delivered', 
@@ -361,11 +417,11 @@ const verifyOTP = async (req, res) => {
       [order_id]
     );
 
-    console.log('Order updated to delivered:', updateResult.rows[0]?.id);
+    logger.info('OTP verified successfully - delivery completed', { orderId: order_id, partnerId: req.user.id });
 
     // Update delivery partner performance
     try {
-      const orderData = order; // from earlier query
+      const orderData = order;
       const earningsToAdd = orderData?.partner_earnings || orderData?.delivery_fee || 0;
       await pool.query(
         `UPDATE partner_performance 
@@ -376,9 +432,8 @@ const verifyOTP = async (req, res) => {
          WHERE partner_id = $1`,
         [req.user.id, earningsToAdd]
       );
-      console.log('Partner performance updated with earnings:', earningsToAdd);
     } catch (perfErr) {
-      console.error('Error updating partner performance:', perfErr.message);
+      logger.error('Failed to update partner performance', { error: perfErr.message, orderId: order_id });
     }
 
     res.json({ 
@@ -388,10 +443,10 @@ const verifyOTP = async (req, res) => {
       order: updateResult.rows[0]
     });
   } catch (err) {
-    console.error('verifyOTP error:', err);
+    logger.error('Error verifying OTP', { error: err.message, orderId: order_id, partnerId: req.user.id });
     res.status(500).json({ 
       success: false, 
-      message: 'Server error. Please try again later.' 
+      message: 'Something went wrong. Please try again.' 
     });
   }
 };
@@ -400,7 +455,7 @@ const verifyOTP = async (req, res) => {
 // GET /api/delivery/earnings
 // ============================================================
 const getEarnings = async (req, res) => {
-  console.log('getEarnings called:', req.user);
+  
 
   try {
     // Get today's earnings from partner_earnings field (not total_price)
@@ -486,8 +541,8 @@ const getEarnings = async (req, res) => {
       performance: perfResult.rows[0] || {}
     });
   } catch (err) {
-    console.error('getEarnings error:', err);
-    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -495,7 +550,7 @@ const getEarnings = async (req, res) => {
 // GET /api/delivery/history
 // ============================================================
 const getOrderHistory = async (req, res) => {
-  console.log('getOrderHistory called for user:', req.user.id);
+  
   const { page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
 
@@ -513,8 +568,8 @@ const getOrderHistory = async (req, res) => {
       LIMIT $2 OFFSET $3
     `, [req.user.id, limit, offset]);
 
-    console.log('History orders found:', result.rows.length);
-    console.log('History statuses:', result.rows.map(o => o.status));
+    
+    
 
     const countResult = await pool.query(`
       SELECT COUNT(*) FROM orders 
@@ -529,7 +584,8 @@ const getOrderHistory = async (req, res) => {
       pages: Math.ceil(countResult.rows[0].count / limit)
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -569,7 +625,8 @@ const reportIssue = async (req, res) => {
       message: 'Issue reported successfully' 
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -595,7 +652,8 @@ const getProfile = async (req, res) => {
       performance: perfResult.rows[0] || {}
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -621,8 +679,8 @@ const getDeliveryPartners = async (req, res) => {
     `);
     res.json({ success: true, partners: result.rows });
   } catch (err) {
-    console.error('getDeliveryPartners error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 

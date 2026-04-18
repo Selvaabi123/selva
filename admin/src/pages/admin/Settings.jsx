@@ -133,7 +133,7 @@ export default function Settings() {
         <div className="card p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">About</h2>
           <div className="space-y-2 text-sm text-gray-600">
-            <p><strong>Grocy-Mart Admin</strong></p>
+            <p><strong>SwiftMart Admin</strong></p>
             <p>Version 1.0.0</p>
             <p>Notification system with expandable toasts, 15s auto-dismiss, and position preferences.</p>
           </div>

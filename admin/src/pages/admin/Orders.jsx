@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import api from '../../utils/api';
 import AdminLayout from '../../components/AdminLayout';
 import { OrderStatusBadge, OrderTimeline } from '../../components/OrderStatus';
+import SanitizedText from '../../components/SanitizedText';
 import { useToast } from '../../context/ToastContext';
 
 const STATUSES = ['pending','confirmed','preparing','picked','out_for_delivery','delivered','cancelled'];
@@ -17,9 +18,9 @@ export default function AdminOrders() {
   const [filterStatus, setFilterStatus] = useState('');
   const [selected, setSelected] = useState(null);
   const [updating, setUpdating] = useState(false);
+  const intervalRef = useRef(null);
 
-  const load = () => {
-    setLoading(true);
+  const load = useCallback(() => {
     const url = filterStatus ? `/orders?status=${filterStatus}` : '/orders';
     Promise.all([api.get(url), api.get('/delivery/partners')]).then(([o, p]) => {
       setOrders(o.data.orders || []);
@@ -27,9 +28,16 @@ export default function AdminOrders() {
     }).catch(() => {
       toast.error('Failed to load orders', 'Please refresh the page.');
     }).finally(() => setLoading(false));
-  };
+  }, [filterStatus, toast]);
 
-  useEffect(() => { load(); }, [filterStatus]);
+  useEffect(() => { 
+    setLoading(true);
+    load();
+    intervalRef.current = setInterval(load, 15000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [load]);
 
   const handleStatusUpdate = async (orderId, status, delivery_partner_id) => {
     try {
@@ -187,7 +195,7 @@ export default function AdminOrders() {
               {selected.delivery_address && (
                 <div>
                   <h4 className="font-semibold text-sm text-gray-700 mb-2">Delivery Address</h4>
-                  <p className="text-sm text-gray-500 bg-gray-50 rounded-xl p-3">{selected.delivery_address}</p>
+                  <SanitizedText text={selected.delivery_address} className="text-sm text-gray-500 bg-gray-50 rounded-xl p-3 block" />
                 </div>
               )}
             </div>

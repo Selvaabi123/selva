@@ -36,7 +36,7 @@ export default function DeliverySettings() {
               <Package className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-gray-900 text-lg">Grocy-Mart</h1>
+              <h1 className="font-bold text-gray-900 text-lg">SwiftMart</h1>
               <p className="text-xs text-gray-500">Delivery Partner</p>
             </div>
           </div>
@@ -126,7 +126,7 @@ export default function DeliverySettings() {
                   <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
                     <Package className="w-5 h-5 text-white" />
                   </div>
-                  <span className="font-bold text-gray-900">Grocy-Mart</span>
+                  <span className="font-bold text-gray-900">SwiftMart</span>
                 </div>
                 <button onClick={() => setSidebarOpen(false)} className="p-2 bg-gray-100 rounded-lg">
                   <X className="w-5 h-5 text-gray-600" />
@@ -235,7 +235,7 @@ export default function DeliverySettings() {
 
         {/* Footer */}
         <div className="text-center">
-          <p className="text-xs lg:text-sm text-gray-400">Grocy-Mart Delivery Partner</p>
+          <p className="text-xs lg:text-sm text-gray-400">SwiftMart Delivery Partner</p>
           <p className="text-xs text-gray-300 mt-1">Version 1.0.0</p>
         </div>
       </main>

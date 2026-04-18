@@ -1,35 +1,70 @@
 const pool = require('../config/db');
+const crypto = require('crypto');
+const logger = require('../utils/logger');
 
 const generateOTP = () => {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  return crypto.randomInt(1000, 9999).toString();
 };
 
 const calculateDeliveryFee = (distanceKm) => {
   return 50;
 };
 
-// POST /api/orders (user places order)
+const MAX_COD_ORDERS_PER_DAY = 5;
+const COD_ORDER_WINDOW_HOURS = 24;
+
+const checkCODSpam = async (userId) => {
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) as count FROM orders 
+      WHERE user_id = $1 
+        AND payment_method = 'cod' 
+        AND payment_status = 'pending'
+        AND created_at > NOW() - INTERVAL '${COD_ORDER_WINDOW_HOURS} hours'
+    `, [userId]);
+    return parseInt(result.rows[0].count);
+  } catch {
+    return 0;
+  }
+};
+
 const placeOrder = async (req, res) => {
   let { delivery_address, notes, payment_method = 'cod', latitude, longitude } = req.body;
   
-  // SECURITY: Sanitize inputs to prevent XSS and injection
+  const allowedPaymentMethods = ['cod', 'online'];
+  if (!allowedPaymentMethods.includes(payment_method)) {
+    return res.status(400).json({ success: false, message: 'Invalid payment method' });
+  }
+  
   if (delivery_address) delivery_address = String(delivery_address).slice(0, 500).trim();
   if (notes) notes = String(notes).slice(0, 250).trim();
-  if (payment_method) payment_method = ['cod', 'online'].includes(payment_method) ? payment_method : 'cod';
   
-  // Validate latitude/longitude if provided
-  if (latitude && (isNaN(latitude) || latitude < -90 || latitude > 90)) {
-    latitude = null;
+  if (latitude !== null && latitude !== undefined) {
+    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+      latitude = null;
+    }
   }
-  if (longitude && (isNaN(longitude) || longitude < -180 || longitude > 180)) {
-    longitude = null;
+  if (longitude !== null && longitude !== undefined) {
+    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+      longitude = null;
+    }
   }
   
-  console.log('placeOrder request:', { userId: req.user?.id, body: req.body });
-  console.log('User Location:', { latitude, longitude, delivery_address });
+  logger.info('Order placement initiated', { userId: req.user?.id });
 
   if (!req.user || !req.user.id) {
     return res.status(401).json({ success: false, message: 'Unauthorized - please login' });
+  }
+
+  if (payment_method === 'cod') {
+    const recentCODOrders = await checkCODSpam(req.user.id);
+    if (recentCODOrders >= MAX_COD_ORDERS_PER_DAY) {
+      logger.warn('COD spam detected', { userId: req.user.id, recentOrders: recentCODOrders });
+      return res.status(429).json({ 
+        success: false, 
+        message: `You have reached the maximum limit of ${MAX_COD_ORDERS_PER_DAY} Cash on Delivery orders in ${COD_ORDER_WINDOW_HOURS} hours. Please use online payment for your next order.`
+      });
+    }
   }
 
   const client = await pool.connect();
@@ -37,16 +72,16 @@ const placeOrder = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    console.log('Checking cart for user:', req.user.id);
+    if (latitude && longitude) {
+      await client.query(
+        'UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3',
+        [latitude, longitude, req.user.id]
+      );
+    }
 
-    // Get user's cart - ensure cart exists
     let cartResult = await client.query('SELECT id FROM cart WHERE user_id = $1', [req.user.id]);
-    console.log('Cart result:', cartResult.rows);
-    
-    // Create cart if doesn't exist
     let cartId;
     if (cartResult.rows.length === 0) {
-      console.log('Creating new cart for user');
       const newCart = await client.query(
         'INSERT INTO cart (user_id) VALUES ($1) RETURNING id',
         [req.user.id]
@@ -56,24 +91,24 @@ const placeOrder = async (req, res) => {
       cartId = cartResult.rows[0].id;
     }
 
-    console.log('Using cartId:', cartId);
-
     const items = await client.query(
       `SELECT ci.product_id, ci.quantity, p.price, p.stock, p.name
        FROM cart_items ci JOIN products p ON ci.product_id = p.id WHERE ci.cart_id = $1`,
       [cartId]
     );
 
-    console.log('Cart items:', items.rows.length);
-
     if (items.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Your cart is empty. Please add items before placing an order.' });
     }
 
-    // Check stock
     for (const item of items.rows) {
-      if (item.stock < item.quantity) {
+      const qty = parseInt(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 100) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Invalid quantity for one or more items' });
+      }
+      if (item.stock < qty) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: `Insufficient stock for ${item.name}` });
       }
@@ -93,16 +128,13 @@ const placeOrder = async (req, res) => {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       const distance = R * c;
       deliveryFee = calculateDeliveryFee(distance);
-      console.log('Distance:', distance.toFixed(2), 'km, Delivery Fee:', deliveryFee);
     }
     
     const partnerEarnings = deliveryFee;
     const companyEarnings = subtotal;
     const total = subtotal + deliveryFee;
     const otp = generateOTP();
-    console.log('Creating order with subtotal:', subtotal, 'deliveryFee:', deliveryFee, 'total:', total, 'OTP:', otp);
 
-    // Create order
     const orderResult = await client.query(
       `INSERT INTO orders (user_id, total_price, subtotal, delivery_fee, partner_earnings, company_earnings, status, delivery_address, notes, payment_status, delivery_latitude, delivery_longitude, delivery_otp)
        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11, $12) RETURNING *`,
@@ -110,9 +142,7 @@ const placeOrder = async (req, res) => {
     );
     const order = orderResult.rows[0];
     order.otp = otp;
-    console.log('Order created:', order.id, 'OTP:', otp);
 
-    // Create order items & update stock
     for (const item of items.rows) {
       await client.query(
         'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ($1,$2,$3,$4)',
@@ -121,22 +151,20 @@ const placeOrder = async (req, res) => {
       await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
 
-    // Clear cart
     await client.query('DELETE FROM cart_items WHERE cart_id = $1', [cartId]);
 
     await client.query('COMMIT');
-    console.log('Order placed successfully:', order.id);
+    logger.info('Order placed successfully', { orderId: order.id, userId: req.user.id });
     res.status(201).json({ success: true, order, message: 'Order placed successfully!' });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Order error:', err);
-    res.status(500).json({ success: false, message: 'Failed to place order: ' + err.message });
+    logger.error('Order placement failed', { error: err.message, userId: req.user?.id });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   } finally {
     client.release();
   }
 };
 
-// GET /api/orders/user (user's own orders)
 const getUserOrders = async (req, res) => {
   try {
     const orders = await pool.query(
@@ -154,12 +182,11 @@ const getUserOrders = async (req, res) => {
     );
     res.json({ success: true, orders: orders.rows });
   } catch (err) {
-    console.error('getUserOrders error:', err);
-    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+    logger.error('Failed to fetch user orders', { error: err.message, userId: req.user?.id });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// GET /api/orders (admin - all orders)
 const getAllOrders = async (req, res) => {
   const { status, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -194,12 +221,11 @@ const getAllOrders = async (req, res) => {
     const countResult = await pool.query(`SELECT COUNT(*) FROM orders o ${whereClause}`, params);
     res.json({ success: true, orders: result.rows, total: parseInt(countResult.rows[0].count) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    logger.error('Failed to fetch all orders', { error: err.message });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// PUT /api/orders/:id/status (admin)
 const updateOrderStatus = async (req, res) => {
   const { status, delivery_partner_id } = req.body;
   const validStatuses = ['pending','confirmed','preparing','picked','out_for_delivery','delivered','cancelled'];
@@ -218,13 +244,14 @@ const updateOrderStatus = async (req, res) => {
     }
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Order not found' });
+    logger.info('Order status updated', { orderId: req.params.id, status });
     res.json({ success: true, order: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    logger.error('Failed to update order status', { error: err.message, orderId: req.params.id });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// GET /api/orders/:id (single order detail)
 const getOrderById = async (req, res) => {
   try {
     const result = await pool.query(`
@@ -246,17 +273,16 @@ const getOrderById = async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Order not found' });
 
     const order = result.rows[0];
-    // Only allow user to see their own order, or admin/delivery
     if (req.user.role === 'user' && order.user_id !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
     res.json({ success: true, order });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    logger.error('Failed to fetch order', { error: err.message, orderId: req.params.id });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// GET /api/admin/analytics
 const getAnalytics = async (req, res) => {
   try {
     const [totalOrders, totalRevenue, totalUsers, totalProducts, recentOrders, ordersByStatus] = await Promise.all([
@@ -281,12 +307,11 @@ const getAnalytics = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    logger.error('Failed to fetch analytics', { error: err.message });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// PUT /api/orders/:id/rate - Customer rates a delivered order
 const rateDelivery = async (req, res) => {
   const { rating, feedback } = req.body;
   const orderId = req.params.id;
@@ -328,10 +353,11 @@ const rateDelivery = async (req, res) => {
       `, [rating, order.rows[0].delivery_partner_id]);
     }
 
+    logger.info('Order rated', { orderId, rating, userId: req.user.id });
     res.json({ success: true, message: 'Rating submitted successfully' });
   } catch (err) {
-    console.error('Rating error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    logger.error('Failed to submit rating', { error: err.message, orderId });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 

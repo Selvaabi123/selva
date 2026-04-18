@@ -37,7 +37,7 @@ export default function AdminLayout({ children }) {
           <div className="w-8 h-8 bg-brand-500 rounded-xl flex items-center justify-center">
             <StoreIcon className="w-4 h-4 text-white" />
           </div>
-          <span className="font-display font-bold text-lg">Grocy-<span className="text-brand-500">Mart</span></span>
+          <span className="font-display font-bold text-lg">Swift<span className="text-brand-500">Mart</span></span>
         </Link>
         <div className="mt-4 flex items-center gap-3">
           <div className="w-9 h-9 bg-purple-100 rounded-full flex items-center justify-center">

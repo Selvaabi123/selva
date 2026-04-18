@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
+const logger = require('../utils/logger');
 
-// GET /api/admin/users
 const getAllUsers = async (req, res) => {
   try {
     const result = await pool.query(
@@ -9,11 +9,11 @@ const getAllUsers = async (req, res) => {
     );
     res.json({ success: true, users: result.rows });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// POST /api/admin/users (create delivery partner or admin)
 const createUser = async (req, res) => {
   const { name, email, password, role, phone, address } = req.body;
   const allowedRoles = ['user', 'delivery', 'admin'];
@@ -28,12 +28,12 @@ const createUser = async (req, res) => {
     );
     res.status(201).json({ success: true, user: result.rows[0] });
   } catch (err) {
+    
     if (err.code === '23505') return res.status(409).json({ success: false, message: 'Email already exists' });
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// DELETE /api/admin/users/:id
 const deleteUser = async (req, res) => {
   if (parseInt(req.params.id) === req.user.id) {
     return res.status(400).json({ success: false, message: 'Cannot delete yourself' });
@@ -42,11 +42,11 @@ const deleteUser = async (req, res) => {
     await pool.query('DELETE FROM users WHERE id=$1', [req.params.id]);
     res.json({ success: true, message: 'User deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// GET /api/user/profile
 const getProfile = async (req, res) => {
   try {
     const result = await pool.query(
@@ -55,11 +55,11 @@ const getProfile = async (req, res) => {
     );
     res.json({ success: true, user: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-// PUT /api/user/profile
 const updateProfile = async (req, res) => {
   const { name, phone, address } = req.body;
   try {
@@ -69,7 +69,8 @@ const updateProfile = async (req, res) => {
     );
     res.json({ success: true, user: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 

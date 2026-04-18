@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Bike, Phone, MapPin, RefreshCw, Search } from 'lucide-react';
 import api from '../../utils/api';
 import AdminLayout from '../../components/AdminLayout';
@@ -7,15 +7,22 @@ export default function Partners() {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const intervalRef = useRef(null);
 
-  const load = () => {
-    setLoading(true);
+  const load = useCallback(() => {
     api.get('/delivery/partners').then(r => {
       setPartners(r.data.partners || []);
     }).finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    setLoading(true);
+    load();
+    intervalRef.current = setInterval(load, 15000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [load]);
 
   const onlinePartners = partners.filter(p => p.is_online);
   const offlinePartners = partners.filter(p => !p.is_online);
